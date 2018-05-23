@@ -48,9 +48,10 @@ namespace litecore { namespace actor {
                 if (_numThreads == 0)
                     _numThreads = 2;
             }
+			_numThreads = 0;
             LogTo(ActorLog, "Starting Scheduler<%p> with %u threads", this, _numThreads);
-            for (unsigned id = 1; id <= _numThreads; id++)
-                _threadPool.emplace_back([this,id]{task(id);});
+            //for (unsigned id = 1; id <= _numThreads; id++)
+            //    _threadPool.emplace_back([this,id]{task(id);});
         }
     }
     
@@ -66,7 +67,14 @@ namespace litecore { namespace actor {
     }
 
 
-    void Scheduler::task(unsigned taskID) {
+	void Scheduler::runSynchronous() {
+		while (_queue.size()) {
+			ThreadedMailbox *mailbox = _queue.pop();
+			mailbox->performNextMessage();
+		}
+	}
+
+	void Scheduler::task(unsigned taskID) {
         LogToAt(ActorLog, Verbose, "   task %d starting", taskID);
 #ifndef _MSC_VER
         {
@@ -90,8 +98,8 @@ namespace litecore { namespace actor {
 
 
     void Scheduler::schedule(ThreadedMailbox *mbox) {
-        sScheduler->_queue.push(mbox);
-    }
+		sScheduler->_queue.push(mbox);
+	}
 
 
     // Explicitly instantiate the Channel specializations we need; this corresponds to the
@@ -148,7 +156,7 @@ namespace litecore { namespace actor {
 
 
     void ThreadedMailbox::enqueue(std::function<void()> f) {
-        retain(_actor);
+		retain(_actor);
         if (push(f))
             reschedule();
     }
@@ -173,18 +181,17 @@ namespace litecore { namespace actor {
 
 
     void ThreadedMailbox::reschedule() {
-        Scheduler::schedule(this);
+		Scheduler::schedule(this);
     }
 
 
     void ThreadedMailbox::performNextMessage() {
-        LogToAt(ActorLog, Verbose, "%s performNextMessage", _actor->actorName().c_str());
 #if DEBUG
         assert(++_active == 1);     // Fail-safe check to detect 'impossible' re-entrant call
 #endif
         try {
             auto &fn = front();
-            fn();
+			fn();
         } catch (const std::exception &x) {
             _actor->caughtException(x);
         }
@@ -196,8 +203,8 @@ namespace litecore { namespace actor {
 
         bool empty;
         popNoWaiting(empty);
-        if (!empty)
-            reschedule();
+		if (!empty)
+			reschedule();
         release(_actor);
     }
 

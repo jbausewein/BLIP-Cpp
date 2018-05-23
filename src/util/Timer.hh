@@ -70,6 +70,8 @@ namespace litecore { namespace actor {
         /** Is the timer active: waiting to fire or in the act of firing? */
         bool scheduled() const          {return _state != kUnscheduled || _triggered;}
 
+		static void run()				{ manager().run(); }
+
     private:
 
         enum state : uint8_t {
@@ -85,10 +87,10 @@ namespace litecore { namespace actor {
             Manager();
             void setFireTime(Timer*, time);
             void unschedule(Timer*);
-            
+			void run();
+
         private:
             bool _unschedule(Timer*);
-            void run();
 
             map _schedule;                      // A priority queue of Timers ordered by time
             std::mutex _mutex;                  // Thread-safety for _schedule

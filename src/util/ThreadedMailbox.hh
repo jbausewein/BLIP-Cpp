@@ -86,7 +86,7 @@ namespace litecore { namespace actor {
 
         /** Runs the scheduler on the current thread; doesn't return until all pending
             messages are handled. */
-        void runSynchronous()                               {task(0);}
+		void runSynchronous();
 
     protected:
         friend class ThreadedMailbox;

@@ -17,6 +17,7 @@
 //
 
 #include "Timer.hh"
+#include "Logging.hh"
 #include <vector>
 
 using namespace std;
@@ -30,51 +31,28 @@ namespace litecore { namespace actor {
 
 
     Timer::Manager::Manager()
-    :_thread([this](){ run(); })
     { }
-
 
     // Body of the manager's background thread. Waits for timers and calls their callbacks.
     void Timer::Manager::run() {
-#ifndef _MSC_VER
-#if __APPLE__
-        pthread_setname_np("LiteCore Timer");
-#else
-        pthread_setname_np(pthread_self(), "LiteCore Timer");
-#endif
-#endif
-        unique_lock<mutex> lock(_mutex);
-        while(true) {
-            auto earliest = _schedule.begin();
-            if (earliest == _schedule.end()) {
-                // Schedule is empty; just wait for a change
-                _condition.wait(lock);
+		auto earliest = _schedule.begin();
+        if (earliest == _schedule.end()) {
+            // Schedule is empty; just wait for a change
+			return;
+        } else if (earliest->first <= clock::now()) {
+            // A Timer is ready to fire, so remove it and call the callback:
+            auto timer = earliest->second;
+            timer->_triggered = true;
+            _unschedule(timer);
 
-            } else if (earliest->first <= clock::now()) {
-                // A Timer is ready to fire, so remove it and call the callback:
-                auto timer = earliest->second;
-                timer->_triggered = true;
-                _unschedule(timer);
-
-                // Fire the timer, while not holding the mutex (to avoid deadlocks if the
-                // timer callback calls the Timer API.)
-                lock.unlock();
-                try {
-                    timer->_callback();
-                } catch (...) { }
-                timer->_triggered = false;                   // note: not holding any lock
-                if (timer->_autoDelete)
-                    delete timer;
-                lock.lock();
-
-            } else {
-                // Wait for the first timer's fireTime, or until the _schedule is updated:
-                auto nextFireTime = earliest->first;
-                _condition.wait_until(lock, nextFireTime);
-            }
+            try {
+                timer->_callback();
+            } catch (...) { }
+            timer->_triggered = false;                   // note: not holding any lock
+            if (timer->_autoDelete)
+                delete timer;
         }
     }
-
 
     // Waits for a Timer to exit the triggered state (i.e. waits for its callback to complete.)
     void Timer::waitForFire() {
@@ -112,7 +90,7 @@ namespace litecore { namespace actor {
     // Precondition: _mutex must NOT be locked.
     // Postcondition: timer is in _scheduled. timer->_state == kScheduled.
     void Timer::Manager::setFireTime(Timer *timer, clock::time_point when) {
-        unique_lock<mutex> lock(_mutex);
+		unique_lock<mutex> lock(_mutex);
         bool notify = _unschedule(timer);
         timer->_entry = _schedule.insert({when, timer});
         timer->_state = kScheduled;
