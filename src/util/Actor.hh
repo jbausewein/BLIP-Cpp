@@ -27,7 +27,8 @@
 
 #if __APPLE__
 // Use GCD if available, as it's more efficient and has better integration with OS & debugger.
-#define ACTORS_USE_GCD
+// Need to run on unity main thread
+//#define ACTORS_USE_GCD
 #endif
 
 #ifdef ACTORS_USE_GCD
